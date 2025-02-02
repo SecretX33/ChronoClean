@@ -1,0 +1,15 @@
+[package]
+name = "chrono_clean"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4.6", features = ["derive"] }
+color-eyre = "0.6.3" # improved version of anyhow
+humantime = "2.1"
+trash = "5.2.1"
+walkdir = "2.3"
+
+[profile.release]
+opt-level = 3
+lto = true
