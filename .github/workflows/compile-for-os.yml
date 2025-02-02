@@ -119,7 +119,7 @@ jobs:
       - name: Generate final binary name
         id: binary_name
         run: |
-          binary_name=$(echo ZipSource.${{ needs.os_info.outputs.architecture_bits }}.${{ needs.os_info.outputs.os_name_pretty }}.zip) 
+          binary_name=$(echo ChronoClean.${{ needs.os_info.outputs.architecture_bits }}.${{ needs.os_info.outputs.os_name_pretty }}.zip) 
           echo Binary name: $binary_name
           echo "binary_name=$binary_name" >> $GITHUB_OUTPUT
       
@@ -155,7 +155,7 @@ jobs:
           echo "=== Release folder contents ==="
           dir ${{ needs.build_variables.outputs.release_folder }}
           echo "=== Zipping binary ==="
-          tar.exe -a -c -f ${{ needs.build_variables.outputs.release_folder }}\${{ needs.build_variables.outputs.binary_name }} -C ${{ needs.build_variables.outputs.release_folder }} zipsource.exe
+          tar.exe -a -c -f ${{ needs.build_variables.outputs.release_folder }}\${{ needs.build_variables.outputs.binary_name }} -C ${{ needs.build_variables.outputs.release_folder }} chronoclean.exe
 
       - name: Zip binary (Linux/MacOS)
         if: needs.os_info.outputs.os_name != 'windows'
@@ -164,7 +164,7 @@ jobs:
           echo "=== Release folder contents ==="
           ls -la ${{ needs.build_variables.outputs.release_folder }}
           echo "=== Zipping binary ==="
-          zip -j ${{ needs.build_variables.outputs.release_folder }}/${{ needs.build_variables.outputs.binary_name }} ${{ needs.build_variables.outputs.release_folder }}/zipsource
+          zip -j ${{ needs.build_variables.outputs.release_folder }}/${{ needs.build_variables.outputs.binary_name }} ${{ needs.build_variables.outputs.release_folder }}/chronoclean
 
       - name: Move zipped binary
         run: mv -v ${{ needs.build_variables.outputs.release_folder }}/${{ needs.build_variables.outputs.binary_name }} dist/
