@@ -13,16 +13,11 @@ ChronoClean is a fast, efficient, and safe file cleanup utility written in Rust 
 - 🧹 Optional cleanup of empty folders
 - 🔗 Optional symbolic link following
 
-## Installation
+## Download
 
-### From Source
-```bash
-git clone https://github.com/SecretX33/ChronoClean.git
-cd ChronoClean
-cargo build --release
-```
+ChronoClean is available for Windows, Linux, and MacOS. 
 
-The compiled binary will be available in `target/release/`.
+Get the latest version [here](https://github.com/SecretX33/ChronoClean/releases/latest). Want an older version? Check all releases [here](https://github.com/SecretX33/ChronoClean/releases).
 
 ## Usage
 
@@ -62,27 +57,27 @@ You can also combine them: `1y6M` (1 year and 6 months), `2w3d` (2 weeks and 3 d
 
 #### Delete files older than 30 days in Downloads folder
 ```bash
-chronoclean --delete-before 30d --target-folders "C:/Users/YourUser/Downloads"
+chronoclean --delete-before 30d --target-folders "C:/Users/User/Downloads"
 ```
 
 #### Clean multiple folders, ignore specific paths
 ```bash
-chronoclean --delete-before 1w --target-folders "Downloads,Documents" --ignored-paths "Documents/Important,Downloads/Keep"
+chronoclean --delete-before 1w --target-folders "C:/Users/User/Downloads","C:/Users/User/Documents" --ignored-paths "C:/Users/User/Downloads/Keep","C:/Users/User/Documents/Important"
 ```
 
 #### Preview what would be deleted (dry run)
 ```bash
-chronoclean --delete-before 24h --target-folders "Downloads" --dry-run
+chronoclean --delete-before 24h --target-folders "C:/Users/User/Downloads" --dry-run
 ```
 
 #### Delete old files and clean empty folders
 ```bash
-chronoclean --delete-before 7d --target-folders "Downloads,Temp" --delete-empty-folders
+chronoclean --delete-before 7d --target-folders "C:/Users/User/Downloads","C:/Users/User/Temp" --delete-empty-folders
 ```
 
 #### Use specific timestamp types
 ```bash
-chronoclean --delete-before 30d --target-folders "Downloads" --file-date-types "modified,accessed"
+chronoclean --delete-before 30d --target-folders "C:/Users/User/Downloads" --file-date-types "modified,accessed"
 ```
 
 ## Safety Features
@@ -108,8 +103,8 @@ cargo build --release
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request with your changes, or open an Issue to request new features.
 
 ## License
 
-This project is licensed under the AGPL 3.0 License - see the LICENSE file for details. 
+This project is licensed under the AGPL 3.0 license. See the [LICENSE](LICENSE) file for details.
