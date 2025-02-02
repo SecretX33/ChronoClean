@@ -234,13 +234,6 @@ fn delete_empty_folders(path: &Path, cli: &Cli, counter: &AtomicU32) -> Result<(
         if entry_path.is_dir() {
             // Recursively delete empty subfolders
             delete_empty_folders(&entry_path, cli, counter)?;
-
-            // Check if the subfolder is now empty
-            if entry_path.read_dir()?.next().is_none() {
-                delete_empty_folder(&entry_path, cli, counter)?;
-            } else {
-                is_empty = false;
-            }
         } else {
             // If there's a file, the folder is not empty
             is_empty = false;
@@ -255,6 +248,11 @@ fn delete_empty_folders(path: &Path, cli: &Cli, counter: &AtomicU32) -> Result<(
 }
 
 fn delete_empty_folder(path: &Path, cli: &Cli, counter: &AtomicU32) -> Result<()> {
+    if !path.exists() {
+        log!("Warning: tried to delete a path that does not exist: {}", path.display());
+        return Ok(());
+    } 
+    
     let count = counter.fetch_add(1, Ordering::Relaxed);
     if cli.dry_run {
         log!("{}. Would delete empty folder: {}", count + 1, path.display());
