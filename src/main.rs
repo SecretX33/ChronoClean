@@ -66,16 +66,8 @@ fn main() -> Result<()> {
 
     let files_to_delete = get_files_to_delete(&cli)?;
     delete_files(&cli, &files_to_delete);
-
-    if cli.delete_empty_folders {
-        let counter = AtomicU32::new(0);
-        log!("\nDeleting empty folders...");
-        for target_folder in cli.target_folders.iter() {
-            delete_empty_folders(&target_folder, &cli, &counter)?;
-        }
-        log!("Deleted {} empty folders", counter.load(Ordering::Relaxed));
-    }
-
+    delete_empty_folders_in_target_folders(&cli)?;
+ 
     Ok(())
 }
 
@@ -131,7 +123,7 @@ fn get_files_to_delete(cli: &Cli) -> Result<Vec<PathBuf>> {
 
     log!("Finding files to delete in target folder...");
 
-    for entry in walk_target_folder(&cli) {
+    for entry in walk_target_folders(&cli) {
         if entry.is_err() {
             log!("Failed to read entry: {:?}", entry.err().unwrap());
             continue;
@@ -190,24 +182,42 @@ fn delete_files(cli: &Cli, files_to_delete: &[PathBuf]) {
     log!("Finish deleting files");
 }
 
-fn walk_target_folder(cli: &Cli) -> Box<dyn Iterator<Item = Result<DirEntry>> + '_> {
-    Box::new(cli.target_folders.iter().flat_map(|folder| walk_folder(folder, cli)))
+fn walk_target_folders(cli: &Cli) -> impl Iterator<Item = Result<DirEntry>> + use<'_> {
+    fn walk_folder(
+        folder: &Path,
+        cli: &Cli,
+    ) -> Option<impl Iterator<Item = Result<DirEntry>>> {
+        if !folder.is_dir() {
+            return None;
+        }
+        let mut walk = WalkDir::new(&folder).follow_links(cli.follow_symbolic_links);
+
+        if let Some(min_depth) = cli.min_depth {
+            walk = walk.min_depth(min_depth);
+        }
+        if let Some(max_depth) = cli.max_depth {
+            walk = walk.max_depth(max_depth);
+        }
+
+        Some(walk.into_iter().map(|e| e.map_err(|e| eyre::eyre!(e))))
+    }
+    
+    cli.target_folders.iter()
+        .flat_map(|e| walk_folder(e, cli).into_iter().flatten())
 }
 
-fn walk_folder(folder: &Path, cli: &Cli) -> Box<dyn Iterator<Item = Result<DirEntry>>> {
-    if !folder.is_dir() {
-        return Box::new(std::iter::empty());
+fn delete_empty_folders_in_target_folders(cli: &Cli) -> Result<()> {
+    if !cli.delete_empty_folders {
+        return Ok(());
     }
-    let mut walk = WalkDir::new(&folder).follow_links(cli.follow_symbolic_links);
-
-    if let Some(min_depth) = cli.min_depth {
-        walk = walk.min_depth(min_depth);
+    
+    let counter = AtomicU32::new(0);
+    log!("\nDeleting empty folders...");
+    for target_folder in cli.target_folders.iter() {
+        delete_empty_folders(&target_folder, &cli, &counter)?;
     }
-    if let Some(max_depth) = cli.max_depth {
-        walk = walk.max_depth(max_depth);
-    }
-
-    Box::new(walk.into_iter().map(|e| e.map_err(|e| eyre::eyre!(e))))
+    log!("Deleted {} empty folders", counter.load(Ordering::Relaxed));
+    Ok(())
 }
 
 fn delete_empty_folders(path: &Path, cli: &Cli, counter: &AtomicU32) -> Result<()> {
@@ -251,8 +261,8 @@ fn delete_empty_folder(path: &Path, cli: &Cli, counter: &AtomicU32) -> Result<()
     if !path.exists() {
         log!("Warning: tried to delete a path that does not exist: {}", path.display());
         return Ok(());
-    } 
-    
+    }
+
     let count = counter.fetch_add(1, Ordering::Relaxed);
     if cli.dry_run {
         log!("{}. Would delete empty folder: {}", count + 1, path.display());

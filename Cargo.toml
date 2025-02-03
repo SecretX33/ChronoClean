@@ -1,11 +1,11 @@
 [package]
 name = "chronoclean"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
 clap = { version = "4.4.6", features = ["derive"] }
-color-eyre = "0.6.3" # improved version of anyhow
+color-eyre = "0.6.3"
 humantime = "2.1"
 trash = "5.2.1"
 walkdir = "2.3"

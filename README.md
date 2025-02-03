@@ -39,8 +39,8 @@ chronoclean --delete-before <TIME> --target-folders <PATHS> [OPTIONS]
 
 - `--file-date-types <TYPES>`: Specify which timestamps to check. You can use the full names (created, modified, accessed) or their first letters (c, m, a). [default: created,modified]
 - `--ignored-paths <PATHS>`: Comma-separated list of files/folders to ignore
-- `--min-depth <DEPTH>`: Minimum directory depth to search
-- `--max-depth <DEPTH>`: Maximum directory depth to search
+- `--min-depth <DEPTH>`: Minimum directory depth to search [default: 0]
+- `--max-depth <DEPTH>`: Maximum directory depth to search [default: infinite]
 - `--delete-empty-folders`: Delete empty folders after file cleanup [default: false]
 - `--follow-symbolic-links`: Follow symbolic links while traversing [default: false]
 - `--dry-run`: Preview what would be deleted without actually deleting [default: false]
