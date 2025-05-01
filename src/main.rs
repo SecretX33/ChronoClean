@@ -59,6 +59,7 @@ fn file_date_type_parser(value: &str) -> Result<FileDateType, String> {
 }
 
 fn main() -> Result<()> {
+    color_eyre::install()?;
     let cli = Cli::parse();
 
     validate_arguments(&cli)?;
