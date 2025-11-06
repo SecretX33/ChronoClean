@@ -138,11 +138,12 @@ jobs:
       - build_variables
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6d653acede28d24f02e3cd41383119e8b1b35921 # stable
         with:
+          toolchain: stable
           targets: ${{ inputs.target_toolchain }}
 
       - name: Build for ${{ needs.os_info.outputs.os_name_pretty }}
