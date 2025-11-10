@@ -73,7 +73,7 @@ fn main() -> Result<()> {
 }
 
 fn validate_arguments(cli: &Cli) -> Result<()> {
-    for target_folder in cli.target_folders.iter() {
+    for target_folder in &cli.target_folders {
         if !target_folder.exists() {
             return Err(eyre::eyre!(format!("The target folder does not exist: {}", target_folder.display())));
         }
@@ -124,7 +124,7 @@ fn get_files_to_delete(cli: &Cli) -> Result<Vec<PathBuf>> {
 
     log!("Finding files to delete in target folder...");
 
-    for entry in walk_target_folders(&cli) {
+    for entry in walk_target_folders(cli) {
         if entry.is_err() {
             log!("Failed to read entry: {:?}", entry.err().unwrap());
             continue;
@@ -134,7 +134,7 @@ fn get_files_to_delete(cli: &Cli) -> Result<Vec<PathBuf>> {
         let path = entry.path();
 
         let is_inside_ignored_folder = cli.ignored_paths.as_ref()
-            .map_or(false, |ignored_paths| ignored_paths.iter().any(|ignored_path| path.starts_with(ignored_path)));
+            .is_some_and(|ignored_paths| ignored_paths.iter().any(|ignored_path| path.starts_with(ignored_path)));
         if is_inside_ignored_folder {
             continue;
         }
@@ -191,7 +191,7 @@ fn walk_target_folders(cli: &Cli) -> impl Iterator<Item = Result<DirEntry>> + us
         if !folder.is_dir() {
             return None;
         }
-        let mut walk = WalkDir::new(&folder).follow_links(cli.follow_symbolic_links);
+        let mut walk = WalkDir::new(folder).follow_links(cli.follow_symbolic_links);
 
         if let Some(min_depth) = cli.min_depth {
             walk = walk.min_depth(min_depth);
@@ -202,7 +202,7 @@ fn walk_target_folders(cli: &Cli) -> impl Iterator<Item = Result<DirEntry>> + us
 
         Some(walk.into_iter().map(|e| e.map_err(|e| eyre::eyre!(e))))
     }
-    
+
     cli.target_folders.iter()
         .flat_map(|e| walk_folder(e, cli).into_iter().flatten())
 }
@@ -214,8 +214,8 @@ fn delete_empty_folders_in_target_folders(cli: &Cli) -> Result<()> {
     
     let counter = AtomicU32::new(0);
     log!("\nDeleting empty folders...");
-    for target_folder in cli.target_folders.iter() {
-        delete_empty_folders(&target_folder, &cli, &counter)?;
+    for target_folder in &cli.target_folders {
+        delete_empty_folders(target_folder, cli, &counter)?;
     }
     log!("Deleted {} empty folders", counter.load(Ordering::Relaxed));
     Ok(())
