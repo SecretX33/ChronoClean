@@ -1,10 +1,9 @@
 use clap::Parser;
-use color_eyre::eyre;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{self, Context, ContextCompat, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use walkdir::{DirEntry, WalkDir};
 
 mod log_macros;
@@ -18,7 +17,14 @@ struct Cli {
     #[arg(short, long, required = true, value_name = "PATH", value_delimiter = ',', help = "The folder to delete files from")]
     target_folders: Vec<PathBuf>,
 
-    #[arg(long, default_value = "created,modified", value_delimiter = ',', value_parser = file_date_type_parser, help = "Print debug information")]
+    #[arg(
+        long,
+        default_value = "created,modified",
+        value_delimiter = ',',
+        value_parser = file_date_type_parser,
+        value_name = "TYPES",
+        help = "Which timestamps to check (created, modified, accessed). Can use short forms (c, m, a)"
+    )]
     file_date_types: Vec<FileDateType>,
 
     #[arg(long, value_name = "PATHS", value_delimiter = ',', help = "Add a file or folder as ignored, files ignored and files inside folders ignored will not be deleted")]
@@ -48,6 +54,12 @@ enum FileDateType {
     Accessed,
 }
 
+struct FileTimestamps {
+    created: SystemTime,
+    modified: SystemTime,
+    accessed: SystemTime,
+}
+
 fn file_date_type_parser(value: &str) -> Result<FileDateType, String> {
     let trimmed_value = value.trim();
     match trimmed_value.to_ascii_lowercase().as_str() {
@@ -73,7 +85,7 @@ fn main() -> Result<()> {
 }
 
 fn validate_arguments(cli: &Cli) -> Result<()> {
-    for target_folder in cli.target_folders.iter() {
+    for target_folder in &cli.target_folders {
         if !target_folder.exists() {
             return Err(eyre::eyre!(format!("The target folder does not exist: {}", target_folder.display())));
         }
@@ -86,13 +98,13 @@ fn validate_arguments(cli: &Cli) -> Result<()> {
             }
         }
     }
-    
+
     if let (Some(min_depth), Some(max_depth)) = (cli.min_depth, cli.max_depth) {
         if min_depth > max_depth {
             return Err(eyre::eyre!("The minimum depth must be less than or equal to the maximum depth"));
         }
     }
-    
+
     Ok(())
 }
 
@@ -119,42 +131,28 @@ fn print_arguments(cli: &Cli) {
 fn get_files_to_delete(cli: &Cli) -> Result<Vec<PathBuf>> {
     let mut files_to_delete = Vec::new();
 
-    let now = std::time::SystemTime::now();
+    let now = SystemTime::now();
     let cutoff = now - cli.delete_before;
 
     log!("Finding files to delete in target folder...");
 
-    for entry in walk_target_folders(&cli) {
-        if entry.is_err() {
-            log!("Failed to read entry: {:?}", entry.err().unwrap());
+    for entry in walk_target_folders(cli) {
+        let Ok(entry) = entry else {
+            log!("Failed to read entry: {:?}", entry.unwrap_err());
             continue;
-        }
-
-        let entry = entry?;
+        };
         let path = entry.path();
 
+        // Skip files in ignored paths
         let is_inside_ignored_folder = cli.ignored_paths.as_ref()
-            .map_or(false, |ignored_paths| ignored_paths.iter().any(|ignored_path| path.starts_with(ignored_path)));
+            .is_some_and(|ignored_paths| is_inside_ignored_path(path, ignored_paths));
         if is_inside_ignored_folder {
             continue;
         }
 
         if path.is_file() {
-            let metadata = path.metadata()?;
-
-            let created = metadata.created()?;
-            let modified = metadata.modified()?;
-            let accessed = metadata.accessed()?;
-
-            let file_time = cli.file_date_types.iter()
-                .map(|t| match t {
-                    FileDateType::Created => created,
-                    FileDateType::Modified => modified,
-                    FileDateType::Accessed => accessed,
-                }).max()
-                .expect("At least one file date type must is provided");
-            
-            if file_time <= cutoff {
+            let file_time = get_file_date(path, &cli.file_date_types)?;
+            if file_time < cutoff {
                 files_to_delete.push(path.to_path_buf());
             }
         }
@@ -164,47 +162,105 @@ fn get_files_to_delete(cli: &Cli) -> Result<Vec<PathBuf>> {
     Ok(files_to_delete)
 }
 
+/// Check if a path is inside any of the given parent paths.
+/// Uses canonicalization and case-insensitive comparison on Windows/macOS.
+fn is_inside_ignored_path(path: &Path, ignored_paths: &[PathBuf]) -> bool {
+    // Canonicalize the path being checked (fallback to original if canonicalization fails)
+    let canonical_path = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+
+    ignored_paths.iter()
+        .map(|ignored_path| dunce::canonicalize(ignored_path).unwrap_or_else(|_| ignored_path.clone()))
+        .any(|canonical_ignored_path| {
+            if cfg!(any(target_os = "windows", target_os = "macos")) {
+                // Case-insensitive comparison on Windows/macOS
+                let path_str = canonical_path.to_string_lossy().to_lowercase();
+                let ignored_str = canonical_ignored_path.to_string_lossy().to_lowercase();
+                path_str.starts_with(&ignored_str)
+            } else {
+                canonical_path.starts_with(&canonical_ignored_path)
+            }
+        })
+}
+
+/// Get the most recent timestamp based on selected file date types
+fn get_file_date(path: &Path, date_types: &[FileDateType]) -> Result<SystemTime> {
+    let file_timestamps = get_file_timestamps(path)?;
+    let created = file_timestamps.created;
+    let modified = file_timestamps.modified;
+    let accessed = file_timestamps.accessed;
+
+    let timestamps = date_types.iter()
+        .map(|t| match t {
+            FileDateType::Created => created,
+            FileDateType::Modified => modified,
+            FileDateType::Accessed => accessed,
+        })
+        .max();
+
+    timestamps.context("At least one file date type must be provided")
+}
+
+fn get_file_timestamps(path: &Path) -> Result<FileTimestamps> {
+    let metadata = fs::metadata(path)
+        .with_context(|| format!("Failed to get metadata for: {}", path.display()))?;
+
+    let created = metadata.created()
+        .with_context(|| format!("Failed to get creation time for: {}", path.display()))?;
+    let modified = metadata.modified()
+        .with_context(|| format!("Failed to get modified time for: {}", path.display()))?;
+    let accessed = metadata.accessed().unwrap_or(modified);
+
+    Ok(FileTimestamps {
+        created: created.into(),
+        modified: modified.into(),
+        accessed: accessed.into(),
+    })
+}
+
 fn delete_files(cli: &Cli, files_to_delete: &[PathBuf]) {
     log!("Deleting files...");
 
     let max = files_to_delete.len();
+    let mut success = 0;
+    let mut failed = 0;
 
     for (index, path) in files_to_delete.iter().enumerate() {
         if cli.dry_run {
             log!("{}/{}. Would delete file: {}", index + 1, max, path.display());
+            success += 1;
         } else {
             log!("{}/{}. Deleting file: {}", index + 1, max, path.display());
             if let Err(e) = trash::delete(path) {
                 log!("Failed to move file '{}' to trash: {:?}", path.display(), e);
+                failed += 1;
+            } else {
+                success += 1;
             }
         }
     }
 
-    log!("Finish deleting files");
+    if failed > 0 {
+        log!("Finished: {} succeeded, {} failed", success, failed);
+    } else {
+        log!("Finished deleting {} files", success);
+    }
 }
 
 fn walk_target_folders(cli: &Cli) -> impl Iterator<Item = Result<DirEntry>> + use<'_> {
-    fn walk_folder(
-        folder: &Path,
-        cli: &Cli,
-    ) -> Option<impl Iterator<Item = Result<DirEntry>>> {
-        if !folder.is_dir() {
-            return None;
-        }
-        let mut walk = WalkDir::new(&folder).follow_links(cli.follow_symbolic_links);
-
-        if let Some(min_depth) = cli.min_depth {
-            walk = walk.min_depth(min_depth);
-        }
-        if let Some(max_depth) = cli.max_depth {
-            walk = walk.max_depth(max_depth);
-        }
-
-        Some(walk.into_iter().map(|e| e.map_err(|e| eyre::eyre!(e))))
-    }
-    
     cli.target_folders.iter()
-        .flat_map(|e| walk_folder(e, cli).into_iter().flatten())
+        .filter(|folder| folder.is_dir())
+        .flat_map(|folder| {
+            let mut walk = WalkDir::new(folder).follow_links(cli.follow_symbolic_links);
+
+            if let Some(min_depth) = cli.min_depth {
+                walk = walk.min_depth(min_depth);
+            }
+            if let Some(max_depth) = cli.max_depth {
+                walk = walk.max_depth(max_depth);
+            }
+
+            walk.into_iter().map(|e| e.map_err(Into::into))
+        })
 }
 
 fn delete_empty_folders_in_target_folders(cli: &Cli) -> Result<()> {
@@ -214,8 +270,8 @@ fn delete_empty_folders_in_target_folders(cli: &Cli) -> Result<()> {
     
     let counter = AtomicU32::new(0);
     log!("\nDeleting empty folders...");
-    for target_folder in cli.target_folders.iter() {
-        delete_empty_folders(&target_folder, &cli, &counter)?;
+    for target_folder in &cli.target_folders {
+        delete_empty_folders(target_folder, cli, &counter)?;
     }
     log!("Deleted {} empty folders", counter.load(Ordering::Relaxed));
     Ok(())
@@ -226,14 +282,17 @@ fn delete_empty_folders(path: &Path, cli: &Cli, counter: &AtomicU32) -> Result<(
         return Ok(());
     }
 
+    // Skip ignored paths entirely - don't delete them or recurse into them
+    if cli.ignored_paths.as_ref().is_some_and(|ignored_paths| is_inside_ignored_path(path, ignored_paths)) {
+        return Ok(());
+    }
+
     let mut is_empty = true;
     for entry in fs::read_dir(path)? {
-        if entry.is_err() {
-            log!("Failed to read entry in {}: {:?}", path.display(), entry.err().unwrap());
+        let Ok(entry) = entry else {
+            log!("Failed to read entry in {}: {:?}", path.display(), entry.unwrap_err());
             continue;
-        }
-
-        let entry = entry?;
+        };
         let entry_path = entry.path();
         let file_type = entry.file_type()?;
 
@@ -269,7 +328,10 @@ fn delete_empty_folder(path: &Path, cli: &Cli, counter: &AtomicU32) -> Result<()
         log!("{}. Would delete empty folder: {}", count + 1, path.display());
     } else {
         log!("{}. Deleting empty folder: {}", count + 1, path.display());
-        trash::delete(path)?;
+        if let Err(e) = trash::delete(path) {
+            log!("Warning: Could not delete folder '{}': {:?}", path.display(), e);
+            counter.fetch_sub(1, Ordering::Relaxed); // Undo the count increment
+        }
     }
     Ok(())
 }
