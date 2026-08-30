@@ -13,12 +13,20 @@ on:
           - x86_64-pc-windows-msvc
           - x86_64-unknown-linux-gnu
           - x86_64-apple-darwin
+      version:
+        description: Version to build (e.g. 1.2.3 or v1.2.3). If omitted, uses the one defined in Cargo.toml
+        type: string
+        required: false
   workflow_call:
     inputs:
       target_toolchain:
         description: Select what rust toolchain to use
         type: string
         required: true
+      version:
+        description: Version to build (e.g. 1.2.3 or v1.2.3). If omitted, uses the one defined in Cargo.toml
+        type: string
+        required: false
 
 env:
   CARGO_REGISTRY: https://github.com/rust-lang/crates.io-index
@@ -119,7 +127,7 @@ jobs:
       - name: Generate final binary name
         id: binary_name
         run: |
-          binary_name=$(echo ChronoClean.${{ needs.os_info.outputs.architecture_bits }}.${{ needs.os_info.outputs.os_name_pretty }}.zip) 
+          binary_name=$(echo ChronoClean.${{ needs.os_info.outputs.architecture_bits }}.${{ needs.os_info.outputs.os_name_pretty }}.zip)
           echo Binary name: $binary_name
           echo "binary_name=$binary_name" >> $GITHUB_OUTPUT
       
@@ -138,13 +146,39 @@ jobs:
       - build_variables
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Sanitize provided version
+        id: sanitize
+        if: inputs.version != ''
+        uses: ./.github/actions/sanitize-version
+        with:
+          version: ${{ inputs.version }}
+
+      - name: Set Cargo.toml version
+        if: inputs.version != ''
+        shell: bash
+        run: |
+          version="${{ steps.sanitize.outputs.version }}"
+          sed 's/^version = ".*"/version = "'"$version"'"/' Cargo.toml > Cargo.toml.tmp
+          mv Cargo.toml.tmp Cargo.toml
+
+          echo "=== Cargo.toml version line ==="
+          grep '^version =' Cargo.toml
+          if ! grep -q "^version = \"$version\"" Cargo.toml; then
+            echo "::error::Failed to set version '$version' in Cargo.toml"
+            exit 1
+          fi
+          echo "Cargo.toml version set to: $version"
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@6d653acede28d24f02e3cd41383119e8b1b35921 # stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           targets: ${{ inputs.target_toolchain }}
+
+      - name: Run unit tests
+        run: cargo test --all-features --target ${{ inputs.target_toolchain }}
 
       - name: Build for ${{ needs.os_info.outputs.os_name_pretty }}
         run: cargo build --release --target ${{ inputs.target_toolchain }}
@@ -171,7 +205,7 @@ jobs:
         run: mv -v ${{ needs.build_variables.outputs.release_folder }}/${{ needs.build_variables.outputs.binary_name }} dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ needs.build_variables.outputs.binary_name }}
           path: dist/${{ needs.build_variables.outputs.binary_name }}

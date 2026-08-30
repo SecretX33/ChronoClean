@@ -12,9 +12,9 @@ There are some build mode, each one being useful in some situation, here follows
 
 - ### build and release
 
-The default build mode. It will build binaries for all OSes, then create a new release in Github. 
+The default build mode. It will build binaries for all OSes, then create a new release in Github.
 
-In case the `tag` already exists, it'll be reused, which may lead to inaccurate `source-code.zip` in releases if there was a commit after the tag was created.   
+In case the `tag` already exists, it'll be reused, which may lead to inaccurate `source-code.zip` in releases if there was a commit after the tag was created.
 
 In case the `release` under the same `tag` already exists (release with same name), the binaries will be uploaded to this existing release. If the release already contains some of the files (matched by name and extension), they'll be overridden. Files that don't match the generated ones will not be deleted. The release note text will not be modified.
 
@@ -30,12 +30,12 @@ In case the `release` already exists (release with same name) but under a differ
 
 It will build binaries for all OSes, but not release any of them. Useful for cases where the binaries are needed but a new release is not.
 
-## 2. Version Tag
+## 2. Version
 
-By default, this pipeline will grab the version directly from `Cargo.toml`, but a different version may be specified to be used instead, which will override the `Cargo.toml` file one.
+The project version is managed solely through git tags, the version in `Cargo.toml` is irrelevant and gets overridden by the pipeline before compiling, so the built binary always carries the resolved version.
 
-When providing a custom version tag, be aware that a new commit updating the `Cargo.toml` version will **not** be created, and the program will *still* be built using the version in it. This custom version tag will *only* be used to create the Github tag and the release name. This option does nothing if the `Build Mode` is set to `build only`.
+If this parameter is omitted (the common case), the pipeline auto-increments the patch number of the latest existing git tag (e.g. latest tag `0.1.1` produces version `0.1.2` and tag `v0.1.2`). If no tag exists yet, the first version is `0.0.1`.
 
-## 3. Release Name
+If provided, it accepts both `1.2.3` and `v1.2.3` formats (surrounding whitespace is fine too). The value is validated and normalized by the `sanitize-version` action into the Cargo version (`1.2.3`) and the git tag (`v1.2.3`), anything that isn't a valid `major.minor.patch` version fails the pipeline right away.
 
-The name used in the release. If not provided, the generated name will follow the pattern `v{version_tag}`. This option does nothing if the `Build Mode` is set to `build only`.
+The resolved tag (with the `v` prefix, e.g. `v0.1.2`) is used to create both the git tag and the release, with the release title matching the tag. The tag/release part does nothing if the `Build Mode` is set to `build only`, but the version is still written into the binaries.
