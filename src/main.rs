@@ -210,11 +210,7 @@ fn get_file_timestamps(path: &Path) -> Result<FileTimestamps> {
         .with_context(|| format!("Failed to get modified time for: {}", path.display()))?;
     let accessed = metadata.accessed().unwrap_or(modified);
 
-    Ok(FileTimestamps {
-        created: created.into(),
-        modified: modified.into(),
-        accessed: accessed.into(),
-    })
+    Ok(FileTimestamps { created, modified, accessed })
 }
 
 fn delete_files(cli: &Cli, files_to_delete: &[PathBuf]) {
