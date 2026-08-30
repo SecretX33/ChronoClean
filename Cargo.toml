@@ -11,6 +11,10 @@ humantime = "2.3.0"
 trash = "5.2.5"
 walkdir = "2.5"
 
+[target.'cfg(windows)'.build-dependencies]
+chrono = { version = "0.4.45", features = ["now"], default-features = false }
+winresource = "0.1.31"
+
 [profile.release]
 opt-level = 3
 lto = true
