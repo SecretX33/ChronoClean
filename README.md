@@ -5,6 +5,10 @@
 [![GitHub License](https://img.shields.io/github/license/SecretX33/ChronoClean)](https://github.com/SecretX33/ChronoClean/blob/main/LICENSE)
 [![Rust Version](https://img.shields.io/badge/rust-stable-brightgreen.svg)](https://www.rust-lang.org/)
 
+<div align="center">
+<img src="icons/icon.png" alt="Icon" height="200px" style="border-radius: 10px;">
+</div>
+
 ChronoClean is a fast, efficient, and safe file cleanup utility written in Rust that helps you automatically remove old files based on their timestamps while protecting important data.
 
 ## Features
